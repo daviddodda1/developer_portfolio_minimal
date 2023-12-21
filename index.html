@@ -4,7 +4,20 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>David Dodda</title>
+    <!-- Google tag (gtag.js) -->
+    <script
+      async
+      src="https://www.googletagmanager.com/gtag/js?id=G-Z8M0P0KQKP"
+    ></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag() {
+        dataLayer.push(arguments);
+      }
+      gtag("js", new Date());
 
+      gtag("config", "G-Z8M0P0KQKP");
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -107,6 +120,21 @@
       .footer a {
         text-decoration: none;
         color: var(--accent-color);
+      }
+
+      /* mobile responsive */
+      @media (max-width: 768px) {
+        .container {
+          width: 90%;
+        }
+
+        .heading {
+          font-size: 3rem;
+        }
+
+        .links {
+          flex-direction: column;
+        }
       }
     </style>
   </head>
