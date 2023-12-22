@@ -26,12 +26,16 @@
       href="https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,200;0,400;0,500;0,700;0,800;0,900;1,700&display=swap"
       rel="stylesheet"
     />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css"
+    />
     <style>
       /* 3 color theme variabls  */
       :root {
         --primary-color: #0d3b66;
         --secondary-color: #faf0ca;
-        --accent-color: #f4d35e;
+        --accent-color: #f4815e;
       }
       * {
         margin: 0;
@@ -43,6 +47,7 @@
       body {
         background-color: var(--primary-color);
         color: var(--secondary-color);
+        cursor: none;
       }
 
       .main {
@@ -101,11 +106,13 @@
         transition: all 0.3s ease-in-out;
         margin-top: 1rem;
         font-weight: 600;
+        cursor: none;
       }
 
       .links a:hover {
-        background-color: var(--secondary-color);
-        color: var(--primary-color);
+        background-color: var(--accent-color);
+
+        border-color: var(--accent-color);
       }
 
       .footer {
@@ -136,6 +143,65 @@
           flex-direction: column;
         }
       }
+
+      .cursor {
+        border-radius: 50%;
+        position: fixed;
+        transform: translate(-50%, -50%);
+        pointer-events: none;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+      }
+
+      .default-cursor {
+        width: 8px;
+        height: 8px;
+        background-color: var(--accent-color);
+
+        z-index: 9999;
+        color: var(--primary-color);
+      }
+
+      .link-cursor {
+        width: 32px;
+        height: 32px;
+        background-color: var(--secondary-color);
+
+        z-index: 9999;
+        color: var(--primary-color);
+      }
+
+      .link-cursor i {
+        display: block;
+        font-size: 1.2rem;
+      }
+
+      .cursor-follower {
+        border-radius: 50%;
+        position: fixed;
+        transform: translate(-50%, -50%);
+        pointer-events: none;
+        z-index: 999;
+      }
+
+      .default-cursor-follower {
+        width: 36px;
+        height: 36px;
+        background-color: var(--accent-color);
+        opacity: 0.2;
+      }
+
+      .link-cursor-follower {
+        width: 52px;
+        height: 52px;
+        background-color: var(--secondary-color);
+        opacity: 1;
+      }
+
+      a {
+        cursor: none;
+      }
     </style>
   </head>
   <body>
@@ -146,18 +212,115 @@
         </div>
         <div class="heading">David Dodda</div>
         <div class="links">
-          <a href="https://twitter.com/DavidDodda_" target="_blank">Twitter</a>
-          <a href="https://www.linkedin.com/in/arundavidreddy" target="_blank"
+          <a
+            data-cursor="link"
+            data-cursoricon="twitter"
+            href="https://twitter.com/DavidDodda_"
+            target="_blank"
+            >Twitter</a
+          >
+          <a
+            href="https://www.linkedin.com/in/arundavidreddy"
+            data-cursor="link"
+            data-cursoricon="linkedin"
+            target="_blank"
             >Linkdin</a
           >
-          <a href="" target="_blank">Blog</a>
-          <a href="https://github.com/daviddodda1" target="_blank">Github</a>
+          <a href="" target="_blank" data-cursor="link" data-cursoricon="rss"
+            >Blog</a
+          >
+          <a
+            href="https://github.com/daviddodda1"
+            data-cursor="link"
+            data-cursoricon="github"
+            target="_blank"
+            >Github</a
+          >
         </div>
       </div>
       <div class="footer">
         <p>© 2024 David Dodda</p>
-        <p>contact: <a href="mailto:dd@daviddodda.com">dd@daviddodda.com</a></p>
+        <p>
+          contact:
+          <a
+            data-cursor="link"
+            data-cursoricon="envelope"
+            href="mailto:dd@daviddodda.com"
+            >dd@daviddodda.com</a
+          >
+        </p>
       </div>
     </div>
+    <div class="cursor default-cursor" id="cursor"></div>
+    <div
+      class="cursor-follower default-cursor-follower"
+      id="cursor-follower"
+    ></div>
+
+    <script>
+      let cursorFollower = document.getElementById("cursor-follower");
+      let cursor = { x: 0, y: 0 };
+      let follower = { x: 0, y: 0, vx: 0, vy: 0 };
+
+      const stiffness = 0.07; // Spring stiffness
+      const damping = 0.1; // Damping coefficient
+
+      document.addEventListener("mousemove", function (e) {
+        cursor.x = e.clientX;
+        cursor.y = e.clientY;
+        var cursor_el = document.getElementById("cursor");
+        cursor_el.style.left = e.clientX + "px";
+        cursor_el.style.top = e.clientY + "px";
+
+        if (e.target.dataset.cursor == "link") {
+          // cursorFollower.style.width = "52px";
+          // cursorFollower.style.height = "52px";
+          // cursorFollower.style.opacity = "1";
+          // cursorFollower.style.backgroundColor = "var(--secondary-color)";
+
+          cursorFollower.classList.add("link-cursor-follower");
+          cursorFollower.classList.remove("default-cursor-follower");
+
+          cursor_el.classList.add("link-cursor");
+          cursor_el.classList.remove("default-cursor");
+          cursor_el.innerHTML = `<i class="fa fa-${e.target.dataset.cursoricon}"></i>`;
+        } else {
+          cursorFollower.classList.add("default-cursor-follower");
+          cursorFollower.classList.remove("link-cursor-follower");
+
+          cursor_el.classList.add("default-cursor");
+          cursor_el.classList.remove("link-cursor");
+          cursor_el.innerHTML = "";
+        }
+      });
+
+      function animate() {
+        // Calculate spring force
+        let dx = cursor.x - follower.x;
+        let dy = cursor.y - follower.y;
+        let springForceX = dx * stiffness;
+        let springForceY = dy * stiffness;
+
+        // Damping
+        follower.vx *= damping;
+        follower.vy *= damping;
+
+        // Apply forces to velocity
+        follower.vx += springForceX;
+        follower.vy += springForceY;
+
+        // Update position
+        follower.x += follower.vx;
+        follower.y += follower.vy;
+
+        // Apply position to the DOM element
+        cursorFollower.style.left = follower.x + "px";
+        cursorFollower.style.top = follower.y + "px";
+
+        requestAnimationFrame(animate);
+      }
+
+      animate();
+    </script>
   </body>
 </html>
