@@ -83,7 +83,7 @@
         display: flex;
         justify-content: center;
         align-items: center;
-        background-image: url("/pi.png");
+        background-image: url("pi.png");
         background-size: cover;
         background-position: center;
         overflow: hidden;
@@ -339,7 +339,8 @@
       animate();
 
       var img = new Image();
-      img.src = "/pi.png";
+      // current location /pi.png
+      img.src = "pi.png";
       img.onload = function () {
         draw(this);
       };
