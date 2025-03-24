@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Coming Soon - David Dodda</title>
+    <title>Experiments - David Dodda</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -29,13 +29,50 @@
         display: flex;
         justify-content: center;
         align-items: center;
-        height: 100vh;
+        min-height: 100vh;
         text-align: center;
+        padding: 2rem;
       }
 
       .container {
-        max-width: 600px;
+        max-width: 1200px;
         width: 90%;
+        opacity: 0;
+        transform: translateY(20px);
+        animation: fadeIn 0.8s ease forwards;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+      }
+
+      @keyframes fadeIn {
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      .nav-back {
+        position: fixed;
+        top: 2rem;
+        left: 2rem;
+        text-decoration: none;
+        color: var(--secondary-color);
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        opacity: 0.8;
+        transition: all 0.3s ease;
+      }
+
+      .nav-back:hover {
+        opacity: 1;
+        transform: translateX(-5px);
+      }
+
+      .nav-back svg {
+        width: 20px;
+        height: 20px;
       }
 
       .heading {
@@ -45,38 +82,83 @@
       }
 
       .subheading {
-        font-size: 1.5rem;
-        margin-bottom: 2rem;
+        font-size: 1.1rem;
+        opacity: 0.8;
+        margin-bottom: 3rem;
+        max-width: 600px;
+        margin-left: auto;
+        margin-right: auto;
       }
 
-      .notify {
-        font-size: 1rem;
-        margin-bottom: 1rem;
-      }
-
-      .email-input {
+      .experiments-grid {
+        display: flex;
+        justify-content: center;
         width: 100%;
-        padding: 0.5rem;
+        margin-top: 2rem;
+      }
+
+      .experiment-card {
+        background: rgba(196, 237, 239, 0.05);
+        padding: 2rem;
+        border-radius: 15px;
+        transition: all 0.3s ease;
+        text-decoration: none;
+        color: var(--secondary-color);
+        position: relative;
+        overflow: hidden;
+        width: 100%;
+        max-width: 500px;
+      }
+
+      .experiment-card::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(45deg, transparent, rgba(196, 237, 239, 0.05));
+        opacity: 0;
+        transition: opacity 0.3s ease;
+      }
+
+      .experiment-card:hover {
+        transform: translateY(-5px);
+      }
+
+      .experiment-card:hover::before {
+        opacity: 1;
+      }
+
+      .experiment-title {
+        font-size: 1.5rem;
         margin-bottom: 1rem;
-        border: 2px solid var(--secondary-color);
-        border-radius: 5px;
-        font-size: 1rem;
+        color: var(--accent-color);
       }
 
-      .notify-button {
-        padding: 0.5rem 1rem;
-        font-size: 1rem;
-        border: 2px solid var(--secondary-color);
-        background-color: var(--accent-color);
-        color: var(--primary-color);
-        border-radius: 5px;
-        cursor: pointer;
-        transition: all 0.3s ease-in-out;
+      .experiment-description {
+        font-size: 0.9rem;
+        opacity: 0.8;
+        margin-bottom: 1.5rem;
+        line-height: 1.6;
       }
 
-      .notify-button:hover {
-        background-color: var(--secondary-color);
-        color: var(--primary-color);
+      .experiment-meta {
+        font-size: 0.8rem;
+        opacity: 0.6;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-top: auto;
+      }
+
+      .experiment-tech {
+        display: flex;
+        gap: 0.5rem;
+      }
+
+      .experiment-date {
+        font-style: italic;
       }
 
       .cursor,
@@ -85,13 +167,16 @@
         position: fixed;
         transform: translate(-50%, -50%);
         pointer-events: none;
+        transition: width 0.3s, height 0.3s, background-color 0.3s;
       }
+
       .default-cursor {
         width: 8px;
         height: 8px;
         background-color: var(--accent-color);
         z-index: 9999;
       }
+
       .default-cursor-follower {
         width: 36px;
         height: 36px;
@@ -99,51 +184,76 @@
         opacity: 0.2;
         z-index: 999;
       }
+
+      /* Cursor states for interactive elements */
+      .link-hover .default-cursor {
+        width: 12px;
+        height: 12px;
+        background-color: var(--secondary-color);
+      }
+
+      .link-hover .default-cursor-follower {
+        width: 48px;
+        height: 48px;
+        background-color: var(--secondary-color);
+      }
     </style>
   </head>
   <body>
+    <a href="../index.html" class="nav-back">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="19" y1="12" x2="5" y2="12"></line>
+        <polyline points="12 19 5 12 12 5"></polyline>
+      </svg>
+      Back to Home
+    </a>
     <div class="container">
-      <div class="heading">Oh no!</div>
+      <div class="heading">Experiments</div>
       <div class="subheading">
-        All my experiments are scattered everywhere. I'm working on putting them
-        all in one place. Come back later to see all the awesome experiments
-        I've been cooking up.
+        A collection of creative coding experiments exploring interactive design,
+        animations, and visual effects.
+      </div>
+      <div class="experiments-grid">
+        <a href="light.html" class="experiment-card">
+          <div class="experiment-title">Light</div>
+          <div class="experiment-description">
+            An interactive light beam experiment using p5.js. Move your cursor or touch
+            the screen to control a dynamic light cone that reveals hidden elements
+            through pixel manipulation.
+          </div>
+          <div class="experiment-meta">
+            <div class="experiment-tech">p5.js • Canvas • Pixel Manipulation</div>
+            <div class="experiment-date">Mar 2024</div>
+          </div>
+        </a>
       </div>
     </div>
     <div class="cursor default-cursor" id="cursor"></div>
-    <div
-      class="cursor-follower default-cursor-follower"
-      id="cursor-follower"
-    ></div>
+    <div class="cursor-follower default-cursor-follower" id="cursor-follower"></div>
 
     <script>
       let cursorFollower = document.getElementById("cursor-follower");
       let cursor = { x: 0, y: 0 };
       let follower = { x: 0, y: 0, vx: 0, vy: 0 };
 
-      const stiffness = 0.07; // Spring stiffness
-      const damping = 0.1; // Damping coefficient
+      const stiffness = 0.07;
+      const damping = 0.1;
 
       function animate() {
-        // Calculate spring force
         let dx = cursor.x - follower.x;
         let dy = cursor.y - follower.y;
         let springForceX = dx * stiffness;
         let springForceY = dy * stiffness;
 
-        // Damping
         follower.vx *= damping;
         follower.vy *= damping;
 
-        // Apply forces to velocity
         follower.vx += springForceX;
         follower.vy += springForceY;
 
-        // Update position
         follower.x += follower.vx;
         follower.y += follower.vy;
 
-        // Apply position to the DOM element
         cursorFollower.style.left = follower.x + "px";
         cursorFollower.style.top = follower.y + "px";
 
@@ -158,9 +268,19 @@
         cursor_el.style.left = e.clientX + "px";
         cursor_el.style.top = e.clientY + "px";
       });
-      animate();
 
-      //comment to test auto deployment
+      // Enhanced cursor interactions
+      const links = document.querySelectorAll('a');
+      links.forEach(link => {
+        link.addEventListener('mouseenter', () => {
+          document.body.classList.add('link-hover');
+        });
+        link.addEventListener('mouseleave', () => {
+          document.body.classList.remove('link-hover');
+        });
+      });
+
+      animate();
     </script>
   </body>
 </html>
