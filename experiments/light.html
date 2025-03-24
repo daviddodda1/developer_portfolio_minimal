@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Light Experiment</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background: #000;
+            overflow: hidden;
+            touch-action: none;
+        }
+        canvas {
+            touch-action: none;
+        }
+      
+    </style>
+</head>
+<body>
+    <script>
+        let img;
+        let scaleValue = 1;
+        let rotationAngle = 0;
+        let isMobile = false;
+        let lastTouchX = 0;
+        let lastTouchY = 0;
+        let isTouch = false;
+
+        function preload() {
+            img = loadImage('light.png');
+        }
+
+        function setup() {
+            createCanvas(window.innerWidth, window.innerHeight);
+            imageMode(CENTER);
+            pixelDensity(1); // Force 1:1 pixel density for better performance
+            isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+            
+            calculateImageScale();
+            
+            // Handle resize
+            window.addEventListener('resize', () => {
+                resizeCanvas(window.innerWidth, window.innerHeight);
+                calculateImageScale();
+            });
+
+            // Better touch handling
+            canvas.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                isTouch = true;
+                if (e.touches.length > 0) {
+                    lastTouchX = e.touches[0].clientX;
+                    lastTouchY = e.touches[0].clientY;
+                }
+            }, { passive: false });
+
+            canvas.addEventListener('touchmove', (e) => {
+                e.preventDefault();
+                if (e.touches.length > 0) {
+                    lastTouchX = e.touches[0].clientX;
+                    lastTouchY = e.touches[0].clientY;
+                }
+            }, { passive: false });
+
+            canvas.addEventListener('touchend', () => {
+                isTouch = false;
+            });
+        }
+
+        function calculateImageScale() {
+            const targetWidth = window.innerWidth * 0.7;
+            scaleValue = targetWidth / img.width;
+            
+            const scaledHeight = img.height * scaleValue;
+            if (scaledHeight > window.innerHeight * 0.9) {
+                scaleValue = (window.innerHeight * 0.9) / img.height;
+            }
+        }
+
+        function draw() {
+            background(0);
+            push();
+            
+            translate(width/2, height/2);
+            scale(scaleValue);
+            
+            image(img, 0, 0);
+            
+            const yellow_ancor = {x: -640, y: -60}
+            rotationAngle += 0.07;
+            
+            let relative_mouse_x, relative_mouse_y, cone_angle;
+            
+            if (mouseIsPressed || isTouch) {
+                const inputX = isTouch ? lastTouchX : mouseX;
+                const inputY = isTouch ? lastTouchY : mouseY;
+                relative_mouse_x = (inputX - width/2) / scaleValue - yellow_ancor.x;
+                relative_mouse_y = (inputY - height/2) / scaleValue - yellow_ancor.y;
+                cone_angle = atan2(relative_mouse_y, relative_mouse_x);
+            } else {
+                cone_angle = rotationAngle;
+                relative_mouse_x = cos(cone_angle);
+                relative_mouse_y = sin(cone_angle);
+            }
+            
+            const spread_angle = PI/8;
+            const rect_x = -860;
+            const rect_y = -90;
+            const rect_width = 700;
+            const rect_height = 220;
+            
+            loadPixels();
+            
+            const scaled_width = width / scaleValue;
+            const scaled_height = height / scaleValue;
+            const startX = max(-scaled_width/2, -img.width/2);
+            const endX = min(scaled_width/2, img.width/2);
+            const startY = max(-scaled_height/2, -img.height/2);
+            const endY = min(scaled_height/2, img.height/2);
+            
+            const widthOffset = width/2/scaleValue;
+            const heightOffset = height/2/scaleValue;
+            const pixelWidth = width;
+            
+            // Larger step size for mobile
+            const step = isMobile ? 4 : 2;
+            
+            function processRectanglePixels(x, y, screen_x, screen_y, isInLightCone) {
+                for (let i = 0; i < step; i++) {
+                    for (let j = 0; j < step; j++) {
+                        const baseIndex = 4 * ((screen_y + i) * pixelWidth + (screen_x + j));
+                        if (baseIndex < pixels.length - 4) {
+                            const r = pixels[baseIndex + 0];
+                            const g = pixels[baseIndex + 1];
+                            const b = pixels[baseIndex + 2];
+                            
+                            if (g > r && g > b) {
+                                if (isInLightCone) {
+                                    pixels[baseIndex + 0] = 255;
+                                    pixels[baseIndex + 1] = 255;
+                                    pixels[baseIndex + 2] = 0;
+                                } else {
+                                    pixels[baseIndex + 0] = 0;
+                                    pixels[baseIndex + 1] = 0;
+                                    pixels[baseIndex + 2] = 0;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            
+            for (let x = startX; x < endX; x += step) {
+                const dx = x - yellow_ancor.x;
+                const screen_x = floor((x + widthOffset) * scaleValue);
+                
+                for (let y = startY; y < endY; y += step) {
+                    const dy = y - yellow_ancor.y;
+                    
+                    const dot = dx * relative_mouse_x + dy * relative_mouse_y;
+                    const mag1 = sqrt(dx * dx + dy * dy);
+                    const mag2 = sqrt(relative_mouse_x * relative_mouse_x + relative_mouse_y * relative_mouse_y);
+                    const cos_angle = dot / (mag1 * mag2);
+                    const isInLightCone = cos_angle >= cos(spread_angle);
+                    
+                    if (x >= rect_x && x < rect_x + rect_width && 
+                        y >= rect_y && y < rect_y + rect_height) {
+                        const screen_y = floor((y + heightOffset) * scaleValue);
+                        processRectanglePixels(x, y, screen_x, screen_y, isInLightCone);
+                        continue;
+                    }
+                    
+                    if (!isInLightCone) {
+                        const screen_y = floor((y + heightOffset) * scaleValue);
+                        for (let i = 0; i < step; i++) {
+                            for (let j = 0; j < step; j++) {
+                                const index = 4 * ((screen_y + i) * pixelWidth + (screen_x + j));
+                                if (index < pixels.length - 4) {
+                                    pixels[index + 0] = 0;
+                                    pixels[index + 1] = 0;
+                                    pixels[index + 2] = 0;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            
+            updatePixels();
+            
+            fill(255, 255, 0);
+            noStroke();
+            ellipse(yellow_ancor.x, yellow_ancor.y, 40, 40);
+
+            pop();
+        }
+    </script>
+</body>
+</html>
