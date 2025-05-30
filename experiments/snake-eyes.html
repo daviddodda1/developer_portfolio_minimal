@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Snake Eyes</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/animejs/3.2.1/anime.min.js"></script>
+    <style>
+      html,
+      body {
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        padding: 0;
+        overflow: hidden; /* Prevent scrollbars */
+        background-color: #f0f0f0; /* Moved from body to ensure full bg */
+      }
+      body {
+        display: flex; /* Keeps grid container centered if it wasn't 100% */
+        justify-content: center;
+        align-items: center;
+        /* height: 100vh; -> covered by html, body height 100% */
+        /* margin: 0; -> covered by html, body */
+        /* background-color: #f0f0f0; -> moved to html, body */
+      }
+      .component-container {
+        /* Style for the outermost container if needed */
+        /* margin: 5px; -> Removed, gap handles spacing */
+      }
+      .square {
+        width: 50px; /* ITEM_SIZE */
+        height: 50px; /* ITEM_SIZE */
+        background-color: #000; /* Solid square color */
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        position: relative; /* For positioning the circle */
+      }
+      .circle {
+        width: 20px;
+        height: 20px;
+        background-color: #fff; /* Circle color */
+        border-radius: 50%; /* Makes it a circle */
+        transition: transform 0.1s ease-out;
+      }
+      #grid-container {
+        display: grid;
+        width: 90%;
+        height: 90%;
+        margin-top: 2.5%;
+        gap: 30px; /* GAP_SIZE */
+        box-sizing: border-box;
+        padding: 30px; /* GAP_SIZE for outer spacing */
+        justify-content: center; /* Center grid items if space leftover */
+        align-content: center; /* Center grid items if space leftover */
+        /* grid-template-columns will be set by JS */
+      }
+
+      #signature {
+        position: fixed;
+        top: calc(2.5% + 10px);
+        left: calc(5% + 20px);
+        padding: 12px 20px;
+        background-color: #000;
+        border-radius: 6px;
+        font-family: "Courier New", Consolas, Monaco, monospace;
+        font-weight: bold;
+        font-size: 14px;
+        color: #fff; /* Initial color from sequence */
+        backdrop-filter: blur(5px);
+        z-index: 1000;
+        transition: color 0.15s ease-out;
+        user-select: none;
+        text-decoration: none; /* Remove underline */
+        cursor: pointer;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="grid-container"></div>
+    <a id="signature" href="https://daviddodda.com" target="_blank"
+      >David Dodda</a
+    >
+
+    <script>
+      const ITEM_SIZE = 50;
+      const GAP_SIZE = 30;
+      const CIRCLE_DIAMETER = 20;
+      const MAX_CIRCLE_TRANSLATE = ITEM_SIZE / 2 - CIRCLE_DIAMETER / 2;
+      const DISPLACEMENT_PROPORTIONALITY_CONSTANT = 1500;
+      const DELAY_FACTOR = 0.75;
+
+      let animatableCircles = [];
+      let isAnimationFrameRequested = false;
+      let currentMouseX = 0;
+      let currentMouseY = 0;
+
+      // Predefined sequence of vibrant, contrasting colors
+      const colorSequence = [
+        "rgb(255, 107, 107)", // Bright Red
+        "rgb(78, 205, 196)", // Turquoise
+        "rgb(255, 185, 0)", // Bright Orange
+        "rgb(129, 236, 236)", // Light Cyan
+        "rgb(255, 121, 198)", // Hot Pink
+        "rgb(160, 196, 255)", // Light Blue
+        "rgb(187, 255, 102)", // Lime Green
+        "rgb(255, 159, 243)", // Light Magenta
+        "rgb(255, 206, 84)", // Golden Yellow
+        "rgb(108, 92, 231)", // Purple Blue
+        "rgb(255, 154, 162)", // Coral Pink
+        "rgb(69, 183, 255)", // Sky Blue
+      ];
+
+      let currentColorIndex = Math.floor(Math.random() * colorSequence.length);
+
+      function getNextColor() {
+        const color = colorSequence[currentColorIndex];
+        currentColorIndex = (currentColorIndex + 1) % colorSequence.length;
+        return color;
+      }
+
+      function generateComplementaryBackgroundColor(circleColor) {
+        // Extract RGB values from the circle color
+        const match = circleColor.match(/rgb\((\d+), (\d+), (\d+)\)/);
+        if (!match) return "#2a2a2a";
+
+        const [, r, g, b] = match.map(Number);
+
+        // Create a darker, more muted version for background
+        const bgR = Math.floor(r * 0.2);
+        const bgG = Math.floor(g * 0.2);
+        const bgB = Math.floor(b * 0.2);
+
+        return `rgb(${bgR}, ${bgG}, ${bgB})`;
+      }
+
+      function updateSignatureColor(color) {
+        const signature = document.getElementById("signature");
+        if (signature) {
+          signature.style.color = color;
+          signature.style.borderColor = color;
+        }
+      }
+
+      function createComponent() {
+        const container = document.createElement("div");
+        container.classList.add("component-container");
+
+        const square = document.createElement("div");
+        square.classList.add("square");
+
+        const circle = document.createElement("div");
+        circle.classList.add("circle");
+
+        animatableCircles.push(circle);
+
+        square.appendChild(circle);
+        container.appendChild(square);
+
+        return container;
+      }
+
+      function calculateElementPositions() {
+        animatableCircles.forEach((circle) => {
+          const rect = circle.getBoundingClientRect();
+          circle.dataset.centerX = rect.left + rect.width / 2 + window.scrollX;
+          circle.dataset.centerY = rect.top + rect.height / 2 + window.scrollY;
+        });
+      }
+
+      function updateCirclePositions() {
+        const mouseX = currentMouseX;
+        const mouseY = currentMouseY;
+
+        animatableCircles.forEach((circle) => {
+          const centerX = parseFloat(circle.dataset.centerX);
+          const centerY = parseFloat(circle.dataset.centerY);
+
+          const deltaX = mouseX - centerX;
+          const deltaY = mouseY - centerY;
+          let distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+
+          if (distance < 1) {
+            distance = 1;
+          }
+
+          const normalizedDeltaX = deltaX / distance;
+          const normalizedDeltaY = deltaY / distance;
+
+          // Inverse relationship for displacement magnitude
+          let rawDisplacementMagnitude =
+            DISPLACEMENT_PROPORTIONALITY_CONSTANT / distance;
+          let actualDisplacementMagnitude = Math.min(
+            rawDisplacementMagnitude,
+            MAX_CIRCLE_TRANSLATE
+          );
+
+          // Always attract towards cursor
+          const targetTranslateX =
+            normalizedDeltaX * actualDisplacementMagnitude;
+          const targetTranslateY =
+            normalizedDeltaY * actualDisplacementMagnitude;
+
+          // Get current transform to preserve scale if it exists
+          const currentTransform = circle.style.transform || "";
+          const scaleMatch = currentTransform.match(/scale\([^)]+\)/);
+          const scaleStr = scaleMatch ? ` ${scaleMatch[0]}` : "";
+
+          // Combine translate and scale transforms
+          circle.style.transform = `translate(${targetTranslateX}px, ${targetTranslateY}px)${scaleStr}`;
+        });
+
+        isAnimationFrameRequested = false;
+      }
+
+      function createGrid(containerId) {
+        const gridContainer = document.getElementById(containerId);
+        if (!gridContainer) {
+          console.error("Grid container not found!");
+          return;
+        }
+
+        animatableCircles = [];
+        gridContainer.innerHTML = "";
+
+        const containerWidth = gridContainer.clientWidth;
+        const containerHeight = gridContainer.clientHeight;
+        const numCols = Math.floor(
+          (containerWidth + GAP_SIZE) / (ITEM_SIZE + GAP_SIZE)
+        );
+        const numRows = Math.floor(
+          (containerHeight + GAP_SIZE) / (ITEM_SIZE + GAP_SIZE)
+        );
+
+        gridContainer.style.gridTemplateColumns = `repeat(${numCols}, ${ITEM_SIZE}px)`;
+        gridContainer.style.gridTemplateRows = `repeat(${numRows}, ${ITEM_SIZE}px)`;
+
+        for (let i = 0; i < numRows * numCols; i++) {
+          const component = createComponent();
+          gridContainer.appendChild(component);
+        }
+        calculateElementPositions();
+      }
+
+      document.addEventListener("DOMContentLoaded", () => {
+        createGrid("grid-container");
+
+        // Initialize signature with current color
+        // updateSignatureColor(colorSequence[currentColorIndex]);
+
+        window.addEventListener("resize", () => {
+          createGrid("grid-container");
+        });
+
+        window.addEventListener("mousemove", (event) => {
+          currentMouseX = event.clientX;
+          currentMouseY = event.clientY;
+
+          if (!isAnimationFrameRequested) {
+            isAnimationFrameRequested = true;
+            requestAnimationFrame(updateCirclePositions);
+          }
+        });
+
+        window.addEventListener("click", (event) => {
+          const mouseX = event.clientX;
+          const mouseY = event.clientY;
+
+          // Update current mouse position for immediate effect
+          currentMouseX = mouseX;
+          currentMouseY = mouseY;
+
+          // Calculate all distances for wave animation
+          const circleDistances = animatableCircles.map((circle) => {
+            const centerX = parseFloat(circle.dataset.centerX);
+            const centerY = parseFloat(circle.dataset.centerY);
+            const deltaX = mouseX - centerX;
+            const deltaY = mouseY - centerY;
+            const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+            return { circle, distance };
+          });
+
+          // Calculate signature position and distance
+          const signature = document.getElementById("signature");
+          const signatureRect = signature.getBoundingClientRect();
+          const signatureCenterX = signatureRect.left + signatureRect.width / 2;
+          const signatureCenterY = signatureRect.top + signatureRect.height / 2;
+          const signatureDeltaX = mouseX - signatureCenterX;
+          const signatureDeltaY = mouseY - signatureCenterY;
+          const signatureDistance = Math.sqrt(
+            signatureDeltaX * signatureDeltaX +
+              signatureDeltaY * signatureDeltaY
+          );
+
+          // Find the maximum delay to time background color change
+          const maxDistance = Math.max(
+            ...circleDistances.map((item) => item.distance)
+          );
+          const maxDelay = maxDistance * DELAY_FACTOR;
+
+          // Immediately update circle positions to show attraction behavior
+          updateCirclePositions();
+
+          // Get next color from sequence
+          const sharedBrightColor = getNextColor();
+          const backgroundColorValue =
+            generateComplementaryBackgroundColor(sharedBrightColor);
+
+          console.log(`New circle color: ${sharedBrightColor}`);
+          console.log(`New background color: ${backgroundColorValue}`);
+
+          // Update signature color with delay proportional to distance
+          const signatureDelay = signatureDistance * DELAY_FACTOR;
+          anime({
+            targets: signature,
+            color: sharedBrightColor,
+            duration: 150,
+            easing: "easeOutQuad",
+            delay: signatureDelay,
+          });
+
+          // Animate background color to follow the wave
+          anime({
+            targets: document.body,
+            backgroundColor: backgroundColorValue,
+            duration: maxDelay + 400, // Duration matches the wave completion
+            easing: "easeOutQuad",
+            delay: 200, // Start slightly after the wave begins
+          });
+
+          // Animate with outward wave (closer circles animate first)
+          circleDistances.forEach(({ circle, distance }) => {
+            const animationDelay = distance * DELAY_FACTOR;
+
+            anime({
+              targets: circle,
+              scale: [
+                { value: 1.4, easing: "easeOutExpo", duration: 200 },
+                { value: 1, easing: "easeOutElastic(1, .7)", duration: 500 },
+              ],
+              delay: animationDelay,
+            });
+
+            // Color change happens when circle reaches max scale
+            anime({
+              targets: circle,
+              backgroundColor: sharedBrightColor,
+              duration: 150,
+              easing: "easeOutQuad",
+              delay: animationDelay + 200,
+            });
+          });
+        });
+      });
+    </script>
+  </body>
+</html>
