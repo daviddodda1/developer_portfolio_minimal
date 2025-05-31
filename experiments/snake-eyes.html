@@ -262,10 +262,7 @@
           }
         });
 
-        window.addEventListener("click", (event) => {
-          const mouseX = event.clientX;
-          const mouseY = event.clientY;
-
+        function triggerInteractionEffects(mouseX, mouseY) {
           // Update current mouse position for immediate effect
           currentMouseX = mouseX;
           currentMouseY = mouseY;
@@ -350,6 +347,31 @@
               delay: animationDelay + 200,
             });
           });
+        }
+
+        window.addEventListener("click", (event) => {
+          triggerInteractionEffects(event.clientX, event.clientY);
+        });
+
+        // Touch event listeners for mobile support
+        window.addEventListener("touchstart", (event) => {
+          if (event.touches.length > 0) {
+            const touch = event.touches[0];
+            triggerInteractionEffects(touch.clientX, touch.clientY);
+          }
+        });
+
+        window.addEventListener("touchmove", (event) => {
+          if (event.touches.length > 0) {
+            const touch = event.touches[0];
+            currentMouseX = touch.clientX;
+            currentMouseY = touch.clientY;
+
+            if (!isAnimationFrameRequested) {
+              isAnimationFrameRequested = true;
+              requestAnimationFrame(updateCirclePositions);
+            }
+          }
         });
       });
     </script>
