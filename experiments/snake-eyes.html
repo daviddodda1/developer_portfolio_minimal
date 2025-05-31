@@ -18,6 +18,7 @@
       body {
         display: flex; /* Keeps grid container centered if it wasn't 100% */
         justify-content: center;
+        flex-direction: column;
         align-items: center;
         /* height: 100vh; -> covered by html, body height 100% */
         /* margin: 0; -> covered by html, body */
@@ -47,7 +48,6 @@
         display: grid;
         width: 90%;
         height: 90%;
-        margin-top: 2.5%;
         gap: 30px; /* GAP_SIZE */
         box-sizing: border-box;
         padding: 30px; /* GAP_SIZE for outer spacing */
@@ -57,9 +57,6 @@
       }
 
       #signature {
-        position: fixed;
-        top: calc(2.5% + 10px);
-        left: calc(5% + 20px);
         padding: 12px 20px;
         background-color: #000;
         border-radius: 6px;
@@ -73,14 +70,17 @@
         user-select: none;
         text-decoration: none; /* Remove underline */
         cursor: pointer;
+        margin-right: auto;
+        margin-left: calc(5% + 15px);
+        margin-bottom: 15px;
       }
     </style>
   </head>
   <body>
-    <div id="grid-container"></div>
     <a id="signature" href="https://daviddodda.com" target="_blank"
       >David Dodda</a
     >
+    <div id="grid-container"></div>
 
     <script>
       const ITEM_SIZE = 50;
