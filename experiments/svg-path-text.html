@@ -1,0 +1,345 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>SVG Path Text Experiment</title>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      overflow: hidden;
+      background: #000;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    svg {
+      width: 100vw;
+      height: 100vh;
+      user-select: none;
+    }
+
+    .guide-path {
+      stroke: rgba(255, 255, 255, 0.12);
+      stroke-width: 2;
+      stroke-dasharray: 10 14;
+    }
+
+    text {
+      dominant-baseline: middle;
+      font-size: 56px;
+      font-weight: 800;
+      letter-spacing: 0.04em;
+      text-anchor: middle;
+      text-transform: uppercase;
+      white-space: pre;
+    }
+
+    #path-text {
+      text-anchor: start;
+    }
+
+    .back-link {
+      position: fixed;
+      top: 24px;
+      left: 24px;
+      z-index: 10;
+      color: rgba(255, 255, 255, 0.78);
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-decoration: none;
+      text-transform: uppercase;
+      transition: color 180ms ease, transform 180ms ease;
+    }
+
+    .back-link:hover {
+      color: #fff;
+      transform: translateX(-4px);
+    }
+
+    .measure-text {
+      visibility: hidden;
+    }
+  </style>
+</head>
+<body>
+  <a class="back-link" href="index.html">← Back to Experiments</a>
+
+  <svg viewBox="0 0 1400 520" role="img" aria-label="Animated text flowing along a string-like SVG path">
+    <defs>
+      <linearGradient id="blue-purple" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="1400" y2="0">
+        <stop offset="0%" stop-color="#00c6ff" />
+        <stop offset="45%" stop-color="#3b82f6" />
+        <stop offset="100%" stop-color="#a855f7" />
+      </linearGradient>
+
+      <path id="curve" d="M -80 300 C 310 300 1090 300 1480 300" fill="none" />
+    </defs>
+
+    <!-- Optional guide so you can see the curve. Remove this path when you do not want it visible. -->
+    <use href="#curve" class="guide-path" fill="none" />
+
+    <text id="path-text">
+      <textPath id="flowing-text" href="#curve" startOffset="0" fill="url(#blue-purple)"></textPath>
+    </text>
+
+    <g id="circle-text-layer" visibility="hidden" aria-hidden="true"></g>
+
+    <!-- Used only to measure one copy of the phrase, so the loop resets seamlessly. -->
+    <text id="measure-text" class="measure-text" aria-hidden="true"></text>
+  </svg>
+
+  <script>
+    const svg = document.querySelector('svg');
+    const curve = document.querySelector('#curve');
+    const bluePurpleGradient = document.querySelector('#blue-purple');
+    const pathText = document.querySelector('#path-text');
+    const flowingText = document.querySelector('#flowing-text');
+    const circleTextLayer = document.querySelector('#circle-text-layer');
+    const measureText = document.querySelector('#measure-text');
+
+    const defaultPhrase = 'JOHN 3:16 • FOR GOD SO LOVED THE WORLD, THAT HE GAVE HIS ONLY BEGOTTEN SON, THAT WHOSOEVER BELIEVETH IN HIM SHOULD NOT PERISH, BUT HAVE EVERLASTING LIFE • THE GOSPEL: JESUS CHRIST DIED FOR OUR SINS, WAS BURIED, AND ROSE AGAIN THE THIRD DAY • REPENT AND BELIEVE THE GOOD NEWS • ';
+    const holdPhrase = 'JESUS SAVES • ';
+    let phrase = defaultPhrase;
+    const speed = 130; // pixels per second
+
+    const pointCount = 80;
+    const leftPeg = { x: -80, y: 300 };
+    const rightPeg = { x: 1480, y: 300 };
+    const baselineY = 300;
+
+    const points = Array.from({ length: pointCount }, (_, i) => {
+      const t = i / (pointCount - 1);
+      return {
+        x: leftPeg.x + (rightPeg.x - leftPeg.x) * t,
+        y: baselineY,
+      };
+    });
+
+    const mouse = { x: 700, y: 180 };
+    const peak = { x: 700, y: 220 };
+    const mouseOffset = { x: 0, y: 70 };
+
+    const circleRadius = 190;
+    const circleCircumference = Math.PI * 2 * circleRadius;
+    const circleLetterGap = 1.5;
+    let circleGlyphs = [];
+
+    let loopLength = 1;
+    let startTime = performance.now();
+    let lastTime = startTime;
+
+    measureText.textContent = phrase;
+
+    function setFlowingPhrase(nextPhrase) {
+      if (phrase === nextPhrase) return;
+
+      phrase = nextPhrase;
+      measureText.textContent = phrase;
+      loopLength = measureText.getComputedTextLength();
+      fillPathWithEnoughText();
+    }
+
+    function clientToSvgPoint(event) {
+      const point = svg.createSVGPoint();
+      point.x = event.clientX;
+      point.y = event.clientY;
+      return point.matrixTransform(svg.getScreenCTM().inverse());
+    }
+
+    function setMouse(event) {
+      const point = clientToSvgPoint(event);
+      mouse.x = point.x;
+      mouse.y = point.y;
+    }
+
+    let isHolding = false;
+
+    window.addEventListener('pointermove', setMouse);
+    window.addEventListener('pointerdown', (event) => {
+      isHolding = true;
+      setFlowingPhrase(holdPhrase);
+      setMouse(event);
+    });
+    window.addEventListener('pointerup', () => {
+      isHolding = false;
+      setFlowingPhrase(defaultPhrase);
+    });
+    window.addEventListener('pointercancel', () => {
+      isHolding = false;
+      setFlowingPhrase(defaultPhrase);
+    });
+
+    function buildSmoothPath() {
+      // Catmull-Rom -> cubic Beziers, so the path flows smoothly through every point.
+      let d = `M ${points[0].x.toFixed(2)} ${points[0].y.toFixed(2)}`;
+
+      for (let i = 0; i < points.length - 1; i++) {
+        const p0 = points[Math.max(0, i - 1)];
+        const p1 = points[i];
+        const p2 = points[i + 1];
+        const p3 = points[Math.min(points.length - 1, i + 2)];
+
+        const c1x = p1.x + (p2.x - p0.x) / 6;
+        const c1y = p1.y + (p2.y - p0.y) / 6;
+        const c2x = p2.x - (p3.x - p1.x) / 6;
+        const c2y = p2.y - (p3.y - p1.y) / 6;
+
+        d += ` C ${c1x.toFixed(2)} ${c1y.toFixed(2)}, ${c2x.toFixed(2)} ${c2y.toFixed(2)}, ${p2.x.toFixed(2)} ${p2.y.toFixed(2)}`;
+      }
+
+      curve.setAttribute('d', d);
+    }
+
+    function fillPathWithEnoughText() {
+      const pathLength = curve.getTotalLength();
+      const copiesNeeded = Math.ceil((pathLength + loopLength * 3) / loopLength);
+      const nextText = phrase.repeat(Math.max(18, copiesNeeded));
+
+      if (flowingText.textContent !== nextText) {
+        flowingText.textContent = nextText;
+      }
+    }
+
+    function buildCirclePath() {
+      const radius = circleRadius;
+      const cx = peak.x;
+      const cy = peak.y;
+
+      curve.setAttribute(
+        'd',
+        `M ${cx.toFixed(2)} ${(cy - radius).toFixed(2)} ` +
+        `A ${radius} ${radius} 0 1 1 ${(cx - 0.1).toFixed(2)} ${(cy - radius).toFixed(2)}`
+      );
+    }
+
+    function measureCircleChar(char) {
+      measureText.textContent = char === ' ' ? '\u00a0' : char;
+      return measureText.getComputedTextLength() + circleLetterGap;
+    }
+
+    function buildCircleGlyphs() {
+      circleTextLayer.textContent = '';
+
+      const phraseChars = holdPhrase.split('').map((char) => ({
+        char,
+        width: measureCircleChar(char),
+      }));
+      const phraseWidth = phraseChars.reduce((sum, item) => sum + item.width, 0);
+      const repeatCount = Math.max(1, Math.round(circleCircumference / phraseWidth));
+      const totalNaturalWidth = phraseWidth * repeatCount;
+      const spacingScale = circleCircumference / totalNaturalWidth;
+      const chars = Array.from({ length: repeatCount }, () => phraseChars).flat();
+
+      let arcPosition = 0;
+      circleGlyphs = chars.map(({ char, width }) => {
+        const scaledWidth = width * spacingScale;
+        const centerArc = arcPosition + scaledWidth / 2;
+        const angle = centerArc / circleRadius - Math.PI / 2;
+        const x = Math.cos(angle) * circleRadius;
+        const y = Math.sin(angle) * circleRadius;
+        const rotation = angle * 180 / Math.PI + 90;
+        const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+
+        text.textContent = char === ' ' ? '\u00a0' : char;
+        text.setAttribute('fill', 'url(#blue-purple)');
+        text.setAttribute('x', x);
+        text.setAttribute('y', y);
+        text.setAttribute('transform', `rotate(${rotation} ${x} ${y})`);
+        circleTextLayer.appendChild(text);
+
+        arcPosition += scaledWidth;
+        return text;
+      });
+    }
+
+    function updateCircleText(distance) {
+      // Keep every letter fixed relative to the circle and rotate the whole
+      // layer as one object. This is smoother than recalculating each glyph.
+      const angle = -(distance % circleCircumference) / circleRadius * 180 / Math.PI;
+      circleTextLayer.setAttribute('transform', `translate(${peak.x.toFixed(3)} ${peak.y.toFixed(3)}) rotate(${angle.toFixed(4)})`);
+
+      // Counter-rotate the gradient so color stays stable while the text spins.
+      bluePurpleGradient.setAttribute('gradientTransform', `rotate(${(-angle).toFixed(4)} ${peak.x.toFixed(3)} ${peak.y.toFixed(3)})`);
+    }
+
+    function updatePathShape(dt, distance) {
+      // Smooth, non-springy tracking. Higher values follow the mouse more closely.
+      const follow = 1 - Math.pow(0.0008, dt);
+      const targetX = mouse.x + (isHolding ? 0 : mouseOffset.x);
+      const targetY = mouse.y + (isHolding ? 0 : mouseOffset.y);
+      peak.x += (targetX - peak.x) * follow;
+      peak.y += (targetY - peak.y) * follow;
+
+      if (isHolding) {
+        pathText.setAttribute('visibility', 'hidden');
+        circleTextLayer.setAttribute('visibility', 'visible');
+        buildCirclePath();
+        updateCircleText(distance);
+        return;
+      }
+
+      bluePurpleGradient.removeAttribute('gradientTransform');
+      pathText.setAttribute('visibility', 'visible');
+      circleTextLayer.setAttribute('visibility', 'hidden');
+
+      const width = 230;
+      const amplitude = peak.y - baselineY;
+
+      for (const p of points) {
+        const distanceFromPeak = p.x - peak.x;
+        const bell = Math.exp(-(distanceFromPeak * distanceFromPeak) / (2 * width * width));
+
+        // Keep the pegs visually fixed while the center forms a clean bell curve.
+        const edgeT = (p.x - leftPeg.x) / (rightPeg.x - leftPeg.x);
+        const pinnedEdgeFade = Math.sin(Math.PI * edgeT);
+
+        p.y = baselineY + amplitude * bell * pinnedEdgeFade;
+      }
+
+      points[0].y = baselineY;
+      points[points.length - 1].y = baselineY;
+
+      buildSmoothPath();
+      fillPathWithEnoughText();
+    }
+
+    function animate(now) {
+      const dt = Math.min((now - lastTime) / 1000, 0.033);
+      lastTime = now;
+
+      const distance = ((now - startTime) / 1000) * speed;
+      updatePathShape(dt, distance);
+
+      const offset = -(distance % loopLength);
+      flowingText.setAttribute('startOffset', offset);
+
+      requestAnimationFrame(animate);
+    }
+
+    function start() {
+      loopLength = measureText.getComputedTextLength();
+      buildCircleGlyphs();
+      measureText.textContent = phrase;
+      buildSmoothPath();
+      fillPathWithEnoughText();
+      startTime = performance.now();
+      lastTime = startTime;
+      requestAnimationFrame(animate);
+    }
+
+    if (document.fonts) {
+      document.fonts.ready.then(start);
+    } else {
+      start();
+    }
+  </script>
+</body>
+</html>
