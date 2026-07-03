@@ -601,6 +601,9 @@
         animate();
       });
 
+      const PROFILE_IMAGE_WEBP = "pi.webp";
+      const PROFILE_IMAGE_FALLBACK = "pi.jpg";
+
       function initProfileWaterEffect() {
         const canvasEl = document.getElementById("profileWaterCanvas");
         if (!canvasEl) return;
@@ -611,7 +614,11 @@
 
         if (!gl) {
           const fallback = document.createElement("img");
-          fallback.src = "pi.jpg";
+          fallback.onerror = () => {
+            fallback.onerror = null;
+            fallback.src = PROFILE_IMAGE_FALLBACK;
+          };
+          fallback.src = PROFILE_IMAGE_WEBP;
           fallback.alt = "David Dodda";
           fallback.className = "innerImage";
           canvasEl.replaceWith(fallback);
@@ -705,7 +712,10 @@
         }
 
         image = new Image();
-        image.src = "pi.jpg";
+        image.onerror = () => {
+          image.onerror = null;
+          image.src = PROFILE_IMAGE_FALLBACK;
+        };
         image.onload = () => {
           const texture = gl.createTexture();
           gl.activeTexture(gl.TEXTURE0);
@@ -721,6 +731,7 @@
           resizeCanvas();
           render();
         };
+        image.src = PROFILE_IMAGE_WEBP;
 
         function render() {
           const rect = canvasEl.getBoundingClientRect();
