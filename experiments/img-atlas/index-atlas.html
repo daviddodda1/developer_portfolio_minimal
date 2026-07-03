@@ -1,0 +1,503 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="stylesheet" href="./style.css?v=metrics-breakdown-6" />
+    <style>
+      .tile canvas {
+        width: 100%;
+        height: 220px;
+        display: block;
+        transition:
+          transform 0.25s var(--ease),
+          filter 0.25s var(--ease);
+      }
+      .tile:hover canvas {
+        transform: scale(1.04);
+        filter: saturate(1.12);
+      }
+    </style>
+  </head>
+  <body>
+    <nav class="nav">
+      <a class="back" href="./index.html">← Back to index</a>
+      <strong>Atlas: single optimized image</strong>
+    </nav>
+    <div id="loading" class="loading" role="status" aria-live="polite">
+      Loading atlas image…
+    </div>
+    <div id="container"></div>
+    <div class="load-time" aria-live="polite">
+      <div id="headlineMetrics" class="headline-metrics">
+        <div class="headline-metric"><span>Transferred</span><strong>—</strong></div>
+        <div class="headline-metric"><span>Network complete</span><strong>—</strong></div>
+        <div class="headline-metric"><span>Visible / ready</span><strong>—</strong></div>
+      </div>
+      <button id="metricsButton" class="metrics-button" type="button" disabled>
+        View breakdown
+      </button>
+    </div>
+
+    <dialog id="dialog">
+      <div class="modal">
+        <section class="info" id="info">
+          <button class="close" style="hidden" id="close" aria-label="Close">
+            ×
+          </button>
+          <h2 id="title"></h2>
+          <ul id="facts"></ul>
+        </section>
+        <canvas id="modalImg" aria-label=""></canvas>
+      </div>
+    </dialog>
+
+    <dialog id="metricsDialog">
+      <div class="metrics-modal">
+        <header class="metrics-header">
+          <div>
+            <h2>Loading breakdown</h2>
+            <p>
+              Timings are measured with the browser Performance API. Cached
+              requests may show very small network phases.
+            </p>
+          </div>
+          <div class="metrics-actions">
+            <button id="metricsCopy" class="copy-button" type="button">
+              Copy data
+            </button>
+            <button id="metricsClose" class="close" type="button" aria-label="Close">
+              ×
+            </button>
+          </div>
+        </header>
+        <div id="metricsContent" class="metrics-body"></div>
+      </div>
+    </dialog>
+
+    <script>
+      const $ = (id) => document.getElementById(id),
+        container = $("container"),
+        dialog = $("dialog"),
+        img = $("modalImg"),
+        info = $("info"),
+        loading = $("loading"),
+        headlineMetrics = $("headlineMetrics"),
+        metricsButton = $("metricsButton"),
+        metricsDialog = $("metricsDialog"),
+        metricsContent = $("metricsContent"),
+        metricsCopy = $("metricsCopy"),
+        metricsClose = $("metricsClose"),
+        atlas = new Image(),
+        dpr = () => devicePixelRatio || 1;
+      let images = [], current;
+      const loadStartedAt = performance.now();
+      const stepMetrics = [];
+      const imageMetrics = [];
+      let latestMetricsText = "";
+
+      const ms = (value) => Math.round(Math.max(0, value || 0) * 100) / 100;
+      const formatLoadTime = (value) => `${Math.round(value)} ms`;
+      const formatBytes = (bytes) => {
+        const value = Number(bytes) || 0;
+        if (value >= 1024 * 1024) return `${(value / 1024 / 1024).toFixed(1)} MB`;
+        if (value >= 1024) return `${Math.round(value / 1024)} KB`;
+        return `${value} B`;
+      };
+      const afterNextPaint = () =>
+        new Promise((resolve) => {
+          requestAnimationFrame(() => requestAnimationFrame(() => resolve(performance.now())));
+        });
+      const escapeHtml = (value) =>
+        String(value ?? "")
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+          .replaceAll('"', "&quot;")
+          .replaceAll("'", "&#039;");
+      const metricValue = (value, suffix = "") =>
+        value === undefined || value === null || value === ""
+          ? "—"
+          : `${escapeHtml(value)}${suffix}`;
+      const table = (columns, rows) => `
+        <div class="metrics-table-wrap">
+          <table class="metrics-table">
+            <thead><tr>${columns
+              .map((column) => `<th>${escapeHtml(column.label)}</th>`)
+              .join("")}</tr></thead>
+            <tbody>${rows
+              .map(
+                (row) => `<tr>${columns
+                  .map((column) => `<td>${metricValue(row[column.key], column.suffix || "")}</td>`)
+                  .join("")}</tr>`,
+              )
+              .join("")}</tbody>
+          </table>
+        </div>`;
+      const buildHeadlineMetrics = (visibleReadyMs, readyBeforePaintMs) => {
+        const measuredResources = [...stepMetrics.filter((row) => row.url), ...imageMetrics];
+        const transferredBytes = measuredResources.reduce(
+          (sum, row) => sum + (Number(row.transferSizeBytes) || 0),
+          0,
+        );
+        const networkCompleteMs = measuredResources.length
+          ? Math.max(
+              ...measuredResources.map(
+                (row) => Number(row.responseEndSinceStartMs) || Number(row.loadEventMs) || 0,
+              ),
+            )
+          : 0;
+
+        return {
+          transferredBytes,
+          transferred: formatBytes(transferredBytes),
+          networkCompleteMs: ms(networkCompleteMs),
+          visibleReadyMs: ms(visibleReadyMs),
+          readyBeforePaintMs: ms(readyBeforePaintMs),
+        };
+      };
+
+      const renderHeadlineMetrics = (metrics) => {
+        headlineMetrics.innerHTML = `
+          <div class="headline-metric"><span>Transferred</span><strong>${metrics.transferred}</strong></div>
+          <div class="headline-metric"><span>Network complete</span><strong>${formatLoadTime(metrics.networkCompleteMs)}</strong></div>
+          <div class="headline-metric"><span>Visible / ready</span><strong>${formatLoadTime(metrics.visibleReadyMs)}</strong></div>
+        `;
+      };
+
+      const renderMetrics = (headline) => {
+        const totalMs = headline.visibleReadyMs;
+
+        metricsContent.innerHTML = `
+          <section class="metrics-summary">
+            <div class="metric-card">
+              <div class="metric-label">Transferred</div>
+              <div class="metric-value">${headline.transferred}</div>
+              <p class="metric-note">Metadata + atlas image bytes transferred.</p>
+            </div>
+            <div class="metric-card">
+              <div class="metric-label">Network complete</div>
+              <div class="metric-value">${formatLoadTime(headline.networkCompleteMs)}</div>
+              <p class="metric-note">Last measured asset finished downloading.</p>
+            </div>
+            <div class="metric-card">
+              <div class="metric-label">Visible / ready</div>
+              <div class="metric-value">${formatLoadTime(headline.visibleReadyMs)}</div>
+              <p class="metric-note">After load, decode, canvas draw, and the next paint opportunity.</p>
+            </div>
+          </section>
+
+          <section class="metric-section">
+            <h3>Page loading timeline</h3>
+            ${table(
+              [
+                { key: "step", label: "Step" },
+                { key: "stepTotalMs", label: "Total", suffix: " ms" },
+                { key: "fetchPromiseToResponseMs", label: "Fetch → response", suffix: " ms" },
+                { key: "bodyReadAndJsonParseMs", label: "Body + JSON parse", suffix: " ms" },
+                { key: "tileCount", label: "Tiles" },
+              ],
+              stepMetrics,
+            )}
+          </section>
+
+          <section class="metric-section">
+            <h3>Atlas image loading</h3>
+            ${table(
+              [
+                { key: "image", label: "Image" },
+                { key: "status", label: "Status" },
+                { key: "loadEventMs", label: "Load event", suffix: " ms" },
+                { key: "decodeMs", label: "Decode wait after load", suffix: " ms" },
+                { key: "totalUntilDecodedMs", label: "Ready after decode", suffix: " ms" },
+                { key: "requestToFirstByteMs", label: "Request → first byte", suffix: " ms" },
+                { key: "contentDownloadMs", label: "Download", suffix: " ms" },
+                { key: "resourceTotalMs", label: "Resource total", suffix: " ms" },
+                { key: "transferSizeBytes", label: "Transfer bytes" },
+                { key: "cached", label: "Cached" },
+              ],
+              imageMetrics,
+            )}
+          </section>
+
+          <section class="metric-section">
+            <h3>Network detail by request</h3>
+            ${table(
+              [
+                { key: "url", label: "Request" },
+                { key: "dnsMs", label: "DNS", suffix: " ms" },
+                { key: "tcpMs", label: "TCP", suffix: " ms" },
+                { key: "tlsMs", label: "TLS", suffix: " ms" },
+                { key: "fetchToRequestStartMs", label: "Queue/cache", suffix: " ms" },
+                { key: "requestToFirstByteMs", label: "TTFB", suffix: " ms" },
+                { key: "contentDownloadMs", label: "Download", suffix: " ms" },
+                { key: "protocol", label: "Protocol" },
+              ],
+              [...stepMetrics.filter((row) => row.url), ...imageMetrics],
+            )}
+          </section>
+
+          <div class="metrics-help">
+            <div><strong>Transferred</strong> is metadata + atlas image bytes, not HTML/CSS.</div>
+            <div><strong>Network complete</strong> is when the last measured asset finished downloading.</div>
+            <div><strong>Visible / ready</strong> waits for decode, canvas draw, and a paint opportunity.</div>
+            <div><strong>Decode wait</strong> is time waiting on <code>image.decode()</code> after load, not pure CPU decode.</div>
+          </div>
+        `;
+
+        latestMetricsText = JSON.stringify(
+          {
+            mode: "Atlas: single optimized image",
+            headlineMetrics: headline,
+            totalMs: ms(totalMs),
+            networkImageRequests: imageMetrics.length,
+            imagesInAtlas: images.length,
+            pageLoadingTimeline: stepMetrics,
+            atlasImageLoading: imageMetrics,
+          },
+          null,
+          2,
+        );
+      };
+
+      const resourceBreakdown = (url) => {
+        const absoluteUrl = new URL(url, location.href).href;
+        const entries = performance.getEntriesByName(absoluteUrl, "resource");
+        const entry = entries[entries.length - 1];
+        if (!entry) return { resourceTiming: "unavailable" };
+
+        return {
+          redirectMs: ms(entry.redirectEnd - entry.redirectStart),
+          dnsMs: ms(entry.domainLookupEnd - entry.domainLookupStart),
+          tcpMs: ms(entry.connectEnd - entry.connectStart),
+          tlsMs:
+            entry.secureConnectionStart > 0
+              ? ms(entry.connectEnd - entry.secureConnectionStart)
+              : 0,
+          fetchToRequestStartMs: ms(entry.requestStart - entry.fetchStart),
+          requestToFirstByteMs: ms(entry.responseStart - entry.requestStart),
+          contentDownloadMs: ms(entry.responseEnd - entry.responseStart),
+          resourceTotalMs: ms(entry.responseEnd - entry.startTime),
+          responseEndSinceStartMs: ms(entry.responseEnd - loadStartedAt),
+          transferSizeBytes: entry.transferSize,
+          encodedBodySizeBytes: entry.encodedBodySize,
+          decodedBodySizeBytes: entry.decodedBodySize,
+          protocol: entry.nextHopProtocol || "",
+          cached: entry.transferSize === 0 && entry.decodedBodySize > 0,
+        };
+      };
+
+      const logMetrics = (totalMs) => {
+        console.group("Image loading metrics — Atlas: single image");
+        console.table([
+          {
+            mode: "Atlas",
+            atlasSourceImages: images.length,
+            networkImageRequests: imageMetrics.length,
+            visibleReadyMs: ms(totalMs),
+          },
+        ]);
+        console.table(stepMetrics);
+        console.table(imageMetrics);
+        console.groupEnd();
+      };
+
+      const finishLoading = async () => {
+        const readyBeforePaintMs = performance.now() - loadStartedAt;
+        loading.classList.add("is-hidden");
+        loading.remove();
+        const paintedAt = await afterNextPaint();
+        stepMetrics.push({
+          step: "Wait for next paint after hiding loader",
+          stepTotalMs: ms(paintedAt - loadStartedAt - readyBeforePaintMs),
+        });
+        const headline = buildHeadlineMetrics(paintedAt - loadStartedAt, readyBeforePaintMs);
+        renderHeadlineMetrics(headline);
+        renderMetrics(headline);
+        metricsButton.disabled = false;
+        logMetrics(headline.visibleReadyMs);
+      };
+
+      const draw = (canvas, a, dw, dh, cover = false) => {
+        const r = dpr(), ctx = canvas.getContext("2d");
+        canvas.width = Math.round(dw * r);
+        canvas.height = Math.round(dh * r);
+        canvas.style.width = dw + "px";
+        canvas.style.height = dh + "px";
+        ctx.setTransform(r, 0, 0, r, 0, 0);
+        ctx.clearRect(0, 0, dw, dh);
+
+        let sx = a.x, sy = a.y, sw = a.width, sh = a.height;
+        if (cover) {
+          const s = Math.max(dw / sw, dh / sh), nw = dw / s, nh = dh / s;
+          sx += (sw - nw) / 2;
+          sy += (sh - nh) / 2;
+          sw = nw;
+          sh = nh;
+        }
+        ctx.drawImage(atlas, sx, sy, sw, sh, 0, 0, dw, dh);
+      };
+
+      const drawTiles = () =>
+        container.querySelectorAll("canvas").forEach((c) =>
+          draw(c, images[c.dataset.i].atlas, c.parentElement.clientWidth, 220, true),
+        );
+
+      const drawModal = (x) => {
+        const a = x.atlas,
+          maxW = Math.min(innerWidth * 0.58, 760),
+          maxH = innerHeight * 0.85,
+          scale = Math.min(maxW / a.width, maxH / a.height),
+          w = Math.round(a.width * scale),
+          h = Math.round(a.height * scale);
+        draw(img, a, w, h);
+        info.style.height = h + "px";
+      };
+
+      const close = () => {
+        dialog.classList.add("closing");
+        setTimeout(
+          () => (dialog.close(), dialog.classList.remove("closing")),
+          180,
+        );
+      };
+
+      const loadMetadata = () => {
+        const url = "./atlas/images.atlas.json";
+        const startedAt = performance.now();
+        return fetch(url)
+          .then((response) => {
+            const responseAt = performance.now();
+            return response.json().then((data) => {
+              const parsedAt = performance.now();
+              stepMetrics.push({
+                step: "Fetch and parse atlas metadata JSON",
+                url,
+                status: response.status,
+                fetchPromiseToResponseMs: ms(responseAt - startedAt),
+                bodyReadAndJsonParseMs: ms(parsedAt - responseAt),
+                stepTotalMs: ms(parsedAt - startedAt),
+                ...resourceBreakdown(url),
+              });
+              return data;
+            });
+          });
+      };
+
+      const loadAtlasImage = () =>
+        new Promise((resolve) => {
+          const url = "./atlas/animals.optimized.jpg";
+          const startedAt = performance.now();
+          let finished = false;
+
+          const finish = (status) => {
+            if (finished) return;
+            finished = true;
+
+            const loadEventAt = performance.now();
+            const decodeStartedAt = performance.now();
+            const decode =
+              status === "loaded" && atlas.decode
+                ? atlas.decode().catch(() => {})
+                : Promise.resolve();
+
+            decode.then(() => {
+              const decodedAt = performance.now();
+              imageMetrics.push({
+                image: "animals.optimized.jpg atlas",
+                url,
+                status,
+                loadEventMs: ms(loadEventAt - startedAt),
+                decodeMs: ms(decodedAt - decodeStartedAt),
+                totalUntilDecodedMs: ms(decodedAt - startedAt),
+                ...resourceBreakdown(url),
+              });
+              resolve();
+            });
+          };
+
+          atlas.onload = () => finish("loaded");
+          atlas.onerror = () => finish("error");
+          atlas.src = url;
+          if (atlas.complete) finish(atlas.naturalWidth ? "loaded" : "error");
+        });
+
+      Promise.all([loadMetadata(), loadAtlasImage()])
+        .then(([data]) => {
+          images = data;
+          const renderStartedAt = performance.now();
+          container.innerHTML = images
+            .map(
+              (x, i) =>
+                `<button class="tile" data-i="${i}" aria-label="Open ${x.animal_name}"><canvas data-i="${i}" aria-label="${x.animal_name}"></canvas></button>`,
+            )
+            .join("");
+          stepMetrics.push({
+            step: "Render tile canvas markup",
+            tileCount: images.length,
+            stepTotalMs: ms(performance.now() - renderStartedAt),
+          });
+
+          const drawStartedAt = performance.now();
+          drawTiles();
+          stepMetrics.push({
+            step: "Draw atlas crops into tile canvases",
+            tileCount: images.length,
+            stepTotalMs: ms(performance.now() - drawStartedAt),
+          });
+          finishLoading();
+        })
+        .catch((error) => {
+          console.error(error);
+          loading.textContent = "Could not load atlas image.";
+        });
+
+      container.onclick = (e) => {
+        const tile = e.target.closest(".tile");
+        if (!tile) return;
+        const x = (current = images[tile.dataset.i]);
+        $("title").textContent = x.animal_name;
+        $("facts").innerHTML = x.fun_facts.map((f) => `<li>${f}</li>`).join("");
+        drawModal(x);
+        img.setAttribute("aria-label", x.animal_name);
+        dialog.showModal();
+      };
+      $("close").onclick = close;
+      dialog.onclick = (e) => e.target === dialog && close();
+      dialog.oncancel = (e) => (e.preventDefault(), close());
+      const copyMetrics = () => {
+        if (!latestMetricsText) return;
+        const copied = () => {
+          metricsCopy.textContent = "Copied";
+          setTimeout(() => (metricsCopy.textContent = "Copy data"), 1200);
+        };
+        const fallbackCopy = () => {
+          const textarea = document.createElement("textarea");
+          textarea.value = latestMetricsText;
+          textarea.style.position = "fixed";
+          textarea.style.opacity = "0";
+          document.body.appendChild(textarea);
+          textarea.select();
+          document.execCommand("copy");
+          textarea.remove();
+          copied();
+        };
+
+        if (navigator.clipboard) {
+          navigator.clipboard.writeText(latestMetricsText).then(copied).catch(fallbackCopy);
+        } else {
+          fallbackCopy();
+        }
+      };
+
+      metricsButton.onclick = () => metricsDialog.showModal();
+      metricsCopy.onclick = copyMetrics;
+      metricsClose.onclick = () => metricsDialog.close();
+      metricsDialog.onclick = (e) => e.target === metricsDialog && metricsDialog.close();
+      addEventListener("resize", () => {
+        drawTiles();
+        if (dialog.open && current) drawModal(current);
+      });
+    </script>
+  </body>
+</html>
